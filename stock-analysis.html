@@ -1,0 +1,1155 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>股票量化关系数据分析与可视化系统</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/element-ui@2.15.14/lib/theme-chalk/index.css">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { height: 100%; width: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+        #app { height: 100vh; display: flex; flex-direction: column; }
+        
+        .header {
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: white;
+            padding: 0 24px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-shrink: 0;
+        }
+        .header h1 { font-size: 20px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
+        .header .user-info { display: flex; align-items: center; gap: 12px; font-size: 14px; }
+        .header .user-info .el-avatar { background: rgba(255,255,255,0.2); }
+        
+        .layout-body { flex: 1; display: flex; overflow: hidden; }
+        
+        .menu-sidebar {
+            width: 220px;
+            background: #304156;
+            flex-shrink: 0;
+            overflow-y: auto;
+        }
+        .menu-sidebar .el-menu { border-right: none; }
+        
+        .main-container { flex: 1; display: flex; overflow: hidden; background: #f0f2f5; }
+        
+        .content {
+            flex: 1;
+            padding: 16px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .analysis-layout { flex: 1; display: flex; overflow: hidden; gap: 16px; }
+        
+        .control-panel {
+            width: 280px;
+            background: white;
+            border-radius: 4px;
+            padding: 16px;
+            overflow-y: auto;
+            border: 1px solid #e4e7ed;
+            flex-shrink: 0;
+        }
+        .control-panel h3 { margin-bottom: 16px; color: #303133; font-size: 16px; padding-bottom: 12px; border-bottom: 2px solid #409EFF; }
+        
+        .chart-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        .chart-card {
+            flex: 1;
+            border: 1px solid #e4e7ed;
+            border-radius: 4px;
+            background: white;
+            display: flex;
+            flex-direction: column;
+        }
+        .chart-card-header {
+            padding: 12px 20px;
+            border-bottom: 1px solid #e4e7ed;
+            font-weight: 600;
+            color: #303133;
+        }
+        .chart-container { flex: 1; min-height: 400px; }
+        
+        .metrics-card { margin-top: 20px; }
+        .metrics-card h4 { margin-bottom: 12px; color: #303133; font-size: 14px; }
+        
+        .el-form-item { margin-bottom: 18px; }
+        
+        .page-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        .page-card {
+            flex: 1;
+            background: white;
+            border-radius: 4px;
+            border: 1px solid #e4e7ed;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        .page-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid #e4e7ed;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .page-header h2 { font-size: 18px; color: #303133; }
+        
+        .page-body {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+        }
+        
+        .stats-row {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+        
+        .stat-card {
+            flex: 1;
+            background: white;
+            border: 1px solid #e4e7ed;
+            border-radius: 4px;
+            padding: 20px;
+            text-align: center;
+        }
+        
+        .stat-card .stat-value {
+            font-size: 28px;
+            font-weight: bold;
+            color: #409EFF;
+        }
+        
+        .stat-card .stat-label {
+            font-size: 14px;
+            color: #909399;
+            margin-top: 8px;
+        }
+        
+        .stat-card.success .stat-value { color: #67C23A; }
+        .stat-card.warning .stat-value { color: #E6A23C; }
+        .stat-card.danger .stat-value { color: #F56C6C; }
+        
+        .action-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .action-buttons .el-button {
+            margin: 0 !important;
+        }
+    </style>
+</head>
+<body>
+<div id="app">
+    <div class="header">
+        <h1><i class="el-icon-data-analysis"></i> 股票量化关系数据分析与可视化系统</h1>
+        <div class="user-info">
+            <el-avatar :size="32" icon="el-icon-user-solid"></el-avatar>
+            <span>admin</span>
+            <el-dropdown>
+                <i class="el-icon-arrow-down" style="cursor: pointer;"></i>
+                <el-dropdown-menu slot="dropdown">
+                    <el-dropdown-item icon="el-icon-user">个人中心</el-dropdown-item>
+                    <el-dropdown-item icon="el-icon-setting">设置</el-dropdown-item>
+                    <el-dropdown-item divided icon="el-icon-switch-button">退出登录</el-dropdown-item>
+                </el-dropdown-menu>
+            </el-dropdown>
+        </div>
+    </div>
+
+    <div class="layout-body">
+        <div class="menu-sidebar">
+            <el-menu
+                :default-active="activeMenu"
+                :default-openeds="['analysis', 'system']"
+                background-color="#304156"
+                text-color="#bfcbd9"
+                active-text-color="#409EFF"
+                @select="handleMenuSelect">
+                
+                <el-submenu index="analysis">
+                    <template slot="title">
+                        <i class="el-icon-s-data"></i>
+                        <span>数据分析</span>
+                    </template>
+                    <el-menu-item index="stock-analysis">
+                        <i class="el-icon-s-marketing"></i>
+                        <span>股票分析</span>
+                    </el-menu-item>
+                </el-submenu>
+
+                <el-submenu index="system">
+                    <template slot="title">
+                        <i class="el-icon-s-tools"></i>
+                        <span>系统管理</span>
+                    </template>
+                    <el-menu-item index="user-management">
+                        <i class="el-icon-user"></i>
+                        <span>用户管理</span>
+                    </el-menu-item>
+                    <el-menu-item index="role-permission">
+                        <i class="el-icon-s-custom"></i>
+                        <span>角色权限</span>
+                    </el-menu-item>
+                    <el-menu-item index="operation-log">
+                        <i class="el-icon-document"></i>
+                        <span>操作日志</span>
+                    </el-menu-item>
+                    <el-menu-item index="system-config">
+                        <i class="el-icon-setting"></i>
+                        <span>系统配置</span>
+                    </el-menu-item>
+                    <el-menu-item index="scheduled-task">
+                        <i class="el-icon-time"></i>
+                        <span>定时更新任务</span>
+                    </el-menu-item>
+                </el-submenu>
+            </el-menu>
+        </div>
+
+        <div class="main-container">
+            <div class="content">
+                
+                <!-- 股票分析页面 -->
+                <div v-if="activeMenu === 'stock-analysis'" class="analysis-layout">
+                    <div class="control-panel">
+                        <h3><i class="el-icon-s-operation"></i> 控制面板</h3>
+
+                        <el-form label-position="top">
+                            <el-form-item label="选择股票">
+                                <el-select v-model="selectedStock" filterable placeholder="请选择股票" @change="onStockChange">
+                                    <el-option v-for="stock in allStocks" :key="stock.code" 
+                                               :label="stock.code + ' - ' + stock.name" :value="stock">
+                                    </el-option>
+                                </el-select>
+                            </el-form-item>
+
+                            <el-form-item label="对比股票 (多选)">
+                                <el-select v-model="compareStocks" multiple filterable placeholder="选择多只股票对比">
+                                    <el-option v-for="stock in allStocks" :key="stock.code" 
+                                               :label="stock.code + ' - ' + stock.name" :value="stock">
+                                    </el-option>
+                                </el-select>
+                            </el-form-item>
+
+                            <el-form-item label="时间周期">
+                                <el-radio-group v-model="timeRange" @change="loadData">
+                                    <el-radio-button label="1M">近1月</el-radio-button>
+                                    <el-radio-button label="3M">近3月</el-radio-button>
+                                    <el-radio-button label="6M">近6月</el-radio-button>
+                                    <el-radio-button label="1Y">近1年</el-radio-button>
+                                    <el-radio-button label="2Y">近2年</el-radio-button>
+                                </el-radio-group>
+                            </el-form-item>
+
+                            <el-form-item label="图表类型">
+                                <el-radio-group v-model="chartType" @change="loadData">
+                                    <el-radio-button label="kline">K线图</el-radio-button>
+                                    <el-radio-button label="return">收益对比</el-radio-button>
+                                    <el-radio-button label="correlation">相关性热力图</el-radio-button>
+                                    <el-radio-button label="riskReturn">风险收益散点</el-radio-button>
+                                </el-radio-group>
+                            </el-form-item>
+
+                            <el-form-item>
+                                <el-button type="primary" @click="loadData" :loading="loading" style="width:100%">
+                                    <i class="el-icon-refresh"></i> 刷新数据
+                                </el-button>
+                            </el-form-item>
+                        </el-form>
+
+                        <div v-if="volatilityData" class="metrics-card">
+                            <h4><i class="el-icon-s-data"></i> 风险指标</h4>
+                            <el-descriptions :column="1" border size="small">
+                                <el-descriptions-item label="年化波动率">
+                                    {{ (volatilityData.annualizedVolatility * 100).toFixed(2) }}%
+                                </el-descriptions-item>
+                                <el-descriptions-item label="日波动率">
+                                    {{ (volatilityData.dailyVolatility * 100).toFixed(2) }}%
+                                </el-descriptions-item>
+                                <el-descriptions-item label="夏普比率">
+                                    {{ volatilityData.sharpeRatio.toFixed(3) }}
+                                </el-descriptions-item>
+                                <el-descriptions-item label="最大回撤">
+                                    {{ (volatilityData.maxDrawdown * 100).toFixed(2) }}%
+                                </el-descriptions-item>
+                                <el-descriptions-item label="年化收益">
+                                    {{ (volatilityData.averageReturn * 252 * 100).toFixed(2) }}%
+                                </el-descriptions-item>
+                            </el-descriptions>
+                        </div>
+                    </div>
+
+                    <div class="chart-area">
+                        <div class="chart-card">
+                            <div class="chart-card-header">
+                                <i class="el-icon-data-line"></i> {{ getChartTitle() }}
+                            </div>
+                            <div ref="chartRef" class="chart-container"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 用户管理页面 -->
+                <div v-if="activeMenu === 'user-management'" class="page-container">
+                    <div class="page-card">
+                        <div class="page-header">
+                            <h2><i class="el-icon-user"></i> 用户管理</h2>
+                            <div>
+                                <el-input v-model="userSearch" placeholder="搜索用户" prefix-icon="el-icon-search" style="width:200px;margin-right:10px" @input="searchUsers"></el-input>
+                                <el-button type="primary" icon="el-icon-plus" @click="showAddUserDialog">新增用户</el-button>
+                            </div>
+                        </div>
+                        <div class="page-body">
+                            <el-table :data="filteredUsers" border stripe style="width:100%">
+                                <el-table-column prop="id" label="ID" width="80"></el-table-column>
+                                <el-table-column prop="username" label="用户名" width="120"></el-table-column>
+                                <el-table-column prop="realName" label="姓名" width="100"></el-table-column>
+                                <el-table-column prop="email" label="邮箱"></el-table-column>
+                                <el-table-column prop="role" label="角色" width="120">
+                                    <template slot-scope="scope">
+                                        <el-tag :type="scope.row.role === '管理员' ? 'danger' : (scope.row.role === '分析师' ? 'warning' : 'info')" size="small">
+                                            {{ scope.row.role }}
+                                        </el-tag>
+                                    </template>
+                                </el-table-column>
+                                <el-table-column prop="status" label="状态" width="80">
+                                    <template slot-scope="scope">
+                                        <el-switch v-model="scope.row.enabled" @change="toggleUserStatus(scope.row)"></el-switch>
+                                    </template>
+                                </el-table-column>
+                                <el-table-column prop="createTime" label="创建时间" width="160"></el-table-column>
+                                <el-table-column label="操作" width="200">
+                                    <template slot-scope="scope">
+                                        <div class="action-buttons">
+                                            <el-button size="mini" icon="el-icon-edit" @click="editUser(scope.row)">编辑</el-button>
+                                            <el-button size="mini" type="danger" icon="el-icon-delete" :disabled="scope.row.username === 'admin'" @click="deleteUser(scope.row)">删除</el-button>
+                                        </div>
+                                    </template>
+                                </el-table-column>
+                            </el-table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 角色权限页面 -->
+                <div v-if="activeMenu === 'role-permission'" class="page-container">
+                    <div class="page-card">
+                        <div class="page-header">
+                            <h2><i class="el-icon-s-custom"></i> 角色权限</h2>
+                            <el-button type="primary" icon="el-icon-plus" @click="showAddRoleDialog">新增角色</el-button>
+                        </div>
+                        <div class="page-body">
+                            <div class="stats-row">
+                                <div class="stat-card"><div class="stat-value">{{ roles.length }}</div><div class="stat-label">角色总数</div></div>
+                                <div class="stat-card success"><div class="stat-value">{{ permissions.length }}</div><div class="stat-label">权限总数</div></div>
+                                <div class="stat-card warning"><div class="stat-value">3</div><div class="stat-label">已分配角色</div></div>
+                            </div>
+                            <el-table :data="roles" border stripe style="width:100%">
+                                <el-table-column prop="id" label="ID" width="80"></el-table-column>
+                                <el-table-column prop="name" label="角色名称" width="150"></el-table-column>
+                                <el-table-column prop="code" label="角色编码" width="150"></el-table-column>
+                                <el-table-column prop="description" label="描述"></el-table-column>
+                                <el-table-column prop="userCount" label="用户数" width="80"></el-table-column>
+                                <el-table-column prop="createTime" label="创建时间" width="160"></el-table-column>
+                                <el-table-column label="操作" width="200">
+                                    <template slot-scope="scope">
+                                        <div class="action-buttons">
+                                            <el-button size="mini" icon="el-icon-key" @click="assignPermissions(scope.row)">分配权限</el-button>
+                                            <el-button size="mini" type="danger" icon="el-icon-delete" :disabled="scope.row.code === 'ADMIN'" @click="deleteRole(scope.row)">删除</el-button>
+                                        </div>
+                                    </template>
+                                </el-table-column>
+                            </el-table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 操作日志页面 -->
+                <div v-if="activeMenu === 'operation-log'" class="page-container">
+                    <div class="page-card">
+                        <div class="page-header">
+                            <h2><i class="el-icon-document"></i> 操作日志</h2>
+                            <div>
+                                <el-date-picker v-model="logDateRange" type="daterange" range-separator="至" start-placeholder="开始日期" end-placeholder="结束日期" style="margin-right:10px" size="small"></el-date-picker>
+                                <el-button type="success" icon="el-icon-download">导出日志</el-button>
+                                <el-button type="danger" icon="el-icon-delete">清空日志</el-button>
+                            </div>
+                        </div>
+                        <div class="page-body">
+                            <div class="stats-row">
+                                <div class="stat-card"><div class="stat-value">{{ operationLogs.length }}</div><div class="stat-label">总记录数</div></div>
+                                <div class="stat-card success"><div class="stat-value">{{ successLogCount }}</div><div class="stat-label">成功</div></div>
+                                <div class="stat-card danger"><div class="stat-value">{{ failLogCount }}</div><div class="stat-label">失败</div></div>
+                            </div>
+                            <el-table :data="operationLogs" border stripe style="width:100%">
+                                <el-table-column prop="id" label="ID" width="80"></el-table-column>
+                                <el-table-column prop="username" label="操作用户" width="120"></el-table-column>
+                                <el-table-column prop="operation" label="操作内容" width="200"></el-table-column>
+                                <el-table-column prop="ip" label="IP地址" width="140"></el-table-column>
+                                <el-table-column prop="method" label="请求方法" width="100">
+                                    <template slot-scope="scope">
+                                        <el-tag :type="scope.row.method === 'GET' ? 'success' : (scope.row.method === 'POST' ? 'warning' : 'danger')" size="mini">{{ scope.row.method }}</el-tag>
+                                    </template>
+                                </el-table-column>
+                                <el-table-column prop="status" label="状态" width="80">
+                                    <template slot-scope="scope">
+                                        <el-tag :type="scope.row.status === '成功' ? 'success' : 'danger'" size="mini">{{ scope.row.status }}</el-tag>
+                                    </template>
+                                </el-table-column>
+                                <el-table-column prop="costTime" label="耗时(ms)" width="100"></el-table-column>
+                                <el-table-column prop="createTime" label="操作时间" width="160"></el-table-column>
+                            </el-table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 系统配置页面 -->
+                <div v-if="activeMenu === 'system-config'" class="page-container">
+                    <div class="page-card">
+                        <div class="page-header">
+                            <h2><i class="el-icon-setting"></i> 系统配置</h2>
+                            <el-button type="primary" icon="el-icon-plus" @click="showAddConfigDialog">新增配置</el-button>
+                        </div>
+                        <div class="page-body">
+                            <el-tabs v-model="configTab">
+                                <el-tab-pane label="基本配置" name="basic">
+                                    <el-form :model="basicConfig" label-width="150px" style="max-width:600px">
+                                        <el-form-item label="系统名称">
+                                            <el-input v-model="basicConfig.systemName"></el-input>
+                                        </el-form-item>
+                                        <el-form-item label="系统Logo">
+                                            <el-input v-model="basicConfig.systemLogo"></el-input>
+                                        </el-form-item>
+                                        <el-form-item label="系统版本">
+                                            <el-input v-model="basicConfig.version" disabled></el-input>
+                                        </el-form-item>
+                                        <el-form-item label="数据保留天数">
+                                            <el-input-number v-model="basicConfig.dataRetentionDays" :min="1" :max="3650"></el-input-number>
+                                        </el-form-item>
+                                        <el-form-item label="上传文件大小(MB)">
+                                            <el-input-number v-model="basicConfig.maxFileSize" :min="1" :max="1024"></el-input-number>
+                                        </el-form-item>
+                                        <el-form-item label="是否开启注册">
+                                            <el-switch v-model="basicConfig.enableRegister"></el-switch>
+                                        </el-form-item>
+                                        <el-form-item>
+                                            <el-button type="primary" @click="saveConfig">保存配置</el-button>
+                                        </el-form-item>
+                                    </el-form>
+                                </el-tab-pane>
+                                <el-tab-pane label="股票数据源" name="datasource">
+                                    <el-form :model="dataSourceConfig" label-width="150px" style="max-width:600px">
+                                        <el-form-item label="数据源类型">
+                                            <el-select v-model="dataSourceConfig.sourceType">
+                                                <el-option label="模拟数据" value="mock"></el-option>
+                                                <el-option label="Tushare" value="tushare"></el-option>
+                                                <el-option label="新浪财经" value="sina"></el-option>
+                                            </el-select>
+                                        </el-form-item>
+                                        <el-form-item label="API密钥">
+                                            <el-input v-model="dataSourceConfig.apiKey" show-password></el-input>
+                                        </el-form-item>
+                                        <el-form-item label="更新频率">
+                                            <el-select v-model="dataSourceConfig.updateFrequency">
+                                                <el-option label="实时" value="realtime"></el-option>
+                                                <el-option label="每小时" value="hourly"></el-option>
+                                                <el-option label="每日" value="daily"></el-option>
+                                            </el-select>
+                                        </el-form-item>
+                                        <el-form-item>
+                                            <el-button type="primary" @click="saveConfig">保存配置</el-button>
+                                            <el-button icon="el-icon-connection" @click="testConnection">测试连接</el-button>
+                                        </el-form-item>
+                                    </el-form>
+                                </el-tab-pane>
+                                <el-tab-pane label="邮件通知" name="email">
+                                    <el-form :model="emailConfig" label-width="150px" style="max-width:600px">
+                                        <el-form-item label="SMTP服务器">
+                                            <el-input v-model="emailConfig.smtpHost"></el-input>
+                                        </el-form-item>
+                                        <el-form-item label="端口">
+                                            <el-input-number v-model="emailConfig.smtpPort"></el-input-number>
+                                        </el-form-item>
+                                        <el-form-item label="发件邮箱">
+                                            <el-input v-model="emailConfig.fromEmail"></el-input>
+                                        </el-form-item>
+                                        <el-form-item label="是否开启SSL">
+                                            <el-switch v-model="emailConfig.enableSSL"></el-switch>
+                                        </el-form-item>
+                                        <el-form-item>
+                                            <el-button type="primary" @click="saveConfig">保存配置</el-button>
+                                            <el-button icon="el-icon-message" @click="testEmail">测试发送</el-button>
+                                        </el-form-item>
+                                    </el-form>
+                                </el-tab-pane>
+                            </el-tabs>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 定时更新任务页面 -->
+                <div v-if="activeMenu === 'scheduled-task'" class="page-container">
+                    <div class="page-card">
+                        <div class="page-header">
+                            <h2><i class="el-icon-time"></i> 定时更新任务</h2>
+                            <el-button type="primary" icon="el-icon-plus" @click="showAddTaskDialog">新增任务</el-button>
+                        </div>
+                        <div class="page-body">
+                            <div class="stats-row">
+                                <div class="stat-card"><div class="stat-value">{{ scheduledTasks.length }}</div><div class="stat-label">任务总数</div></div>
+                                <div class="stat-card success"><div class="stat-value">{{ runningTaskCount }}</div><div class="stat-label">运行中</div></div>
+                                <div class="stat-card warning"><div class="stat-value">{{ stoppedTaskCount }}</div><div class="stat-label">已停止</div></div>
+                            </div>
+                            <el-table :data="scheduledTasks" border stripe style="width:100%">
+                                <el-table-column prop="id" label="ID" width="80"></el-table-column>
+                                <el-table-column prop="name" label="任务名称" width="180"></el-table-column>
+                                <el-table-column prop="cron" label="Cron表达式" width="140"></el-table-column>
+                                <el-table-column prop="description" label="描述"></el-table-column>
+                                <el-table-column prop="status" label="状态" width="100">
+                                    <template slot-scope="scope">
+                                        <el-tag :type="scope.row.status === '运行中' ? 'success' : 'info'" size="small">{{ scope.row.status }}</el-tag>
+                                    </template>
+                                </el-table-column>
+                                <el-table-column prop="lastExecuteTime" label="上次执行时间" width="160"></el-table-column>
+                                <el-table-column label="操作" width="280">
+                                    <template slot-scope="scope">
+                                        <div class="action-buttons">
+                                            <el-button v-if="scope.row.status === '运行中'" size="mini" type="warning" icon="el-icon-video-pause" @click="toggleTask(scope.row)">暂停</el-button>
+                                            <el-button v-else size="mini" type="success" icon="el-icon-video-play" @click="toggleTask(scope.row)">启动</el-button>
+                                            <el-button size="mini" icon="el-icon-refresh" @click="executeTask(scope.row)">执行</el-button>
+                                            <el-button size="mini" type="danger" icon="el-icon-delete" @click="deleteTask(scope.row)">删除</el-button>
+                                        </div>
+                                    </template>
+                                </el-table-column>
+                            </el-table>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/vue@2.7.14/dist/vue.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/element-ui@2.15.14/lib/index.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+
+<script>
+const stockColors = ['#5470c6', '#91cc75', '#fac858', '#ee6666', '#73c0de',
+                    '#3ba272', '#fc8452', '#9a60b4', '#ea7ccc', '#48b4bd'];
+
+const stockList = [
+    { code: '000001', name: '平安银行', basePrice: 12 },
+    { code: '000002', name: '万科A', basePrice: 10 },
+    { code: '600036', name: '招商银行', basePrice: 35 },
+    { code: '600519', name: '贵州茅台', basePrice: 1800 },
+    { code: '000858', name: '五粮液', basePrice: 160 },
+    { code: '601318', name: '中国平安', basePrice: 45 },
+    { code: '002594', name: '比亚迪', basePrice: 260 },
+    { code: '601899', name: '紫金矿业', basePrice: 12 },
+    { code: '002415', name: '海康威视', basePrice: 35 },
+    { code: '300750', name: '宁德时代', basePrice: 200 }
+];
+
+function seededRandom(seed) {
+    let s = seed;
+    return function() {
+        s = (s * 9301 + 49297) % 233280;
+        return s / 233280;
+    };
+}
+
+function gaussianRandom(rand) {
+    let u = 0, v = 0;
+    while(u === 0) u = rand();
+    while(v === 0) v = rand();
+    return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+}
+
+function generateStockData(stock, startDate, endDate, seedOffset) {
+    const rand = seededRandom(42 + seedOffset);
+    const data = [];
+    let currentPrice = stock.basePrice;
+    let previousClose = stock.basePrice;
+    
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+        const dayOfWeek = d.getDay();
+        if (dayOfWeek >= 1 && dayOfWeek <= 5) {
+            const change = gaussianRandom(rand) * 0.02 + 0.0005;
+            const open = currentPrice * (1 + gaussianRandom(rand) * 0.005);
+            const close = currentPrice * (1 + change);
+            const high = Math.max(open, close) * (1 + Math.abs(gaussianRandom(rand)) * 0.01);
+            const low = Math.min(open, close) * (1 - Math.abs(gaussianRandom(rand)) * 0.01);
+            const volume = Math.floor(1000000 + rand() * 5000000);
+            const dailyReturn = previousClose !== 0 ? (close - previousClose) / previousClose : 0;
+            
+            data.push({
+                date: new Date(d).toISOString().split('T')[0],
+                open: Math.round(open * 100) / 100,
+                high: Math.round(high * 100) / 100,
+                low: Math.round(low * 100) / 100,
+                close: Math.round(close * 100) / 100,
+                volume: volume,
+                dailyReturn: Math.round(dailyReturn * 10000) / 10000
+            });
+            
+            previousClose = close;
+            currentPrice = close;
+        }
+    }
+    return data;
+}
+
+function getDateRange(timeRange) {
+    const end = new Date();
+    const start = new Date();
+    switch (timeRange) {
+        case '1M': start.setMonth(start.getMonth() - 1); break;
+        case '3M': start.setMonth(start.getMonth() - 3); break;
+        case '6M': start.setMonth(start.getMonth() - 6); break;
+        case '1Y': start.setFullYear(start.getFullYear() - 1); break;
+        case '2Y': start.setFullYear(start.getFullYear() - 2); break;
+    }
+    return {
+        startDate: start.toISOString().split('T')[0],
+        endDate: end.toISOString().split('T')[0]
+    };
+}
+
+function calculateVolatility(data) {
+    const returns = data.map(d => d.dailyReturn);
+    const n = returns.length;
+    const mean = returns.reduce((a, b) => a + b, 0) / n;
+    const variance = returns.reduce((sum, r) => sum + Math.pow(r - mean, 2), 0) / (n - 1);
+    const dailyVol = Math.sqrt(variance);
+    const annualizedVol = dailyVol * Math.sqrt(252);
+    const sharpe = (mean * 252) / annualizedVol;
+    
+    let peak = data[0].close;
+    let maxDrawdown = 0;
+    for (const d of data) {
+        if (d.close > peak) peak = d.close;
+        const drawdown = (peak - d.close) / peak;
+        if (drawdown > maxDrawdown) maxDrawdown = drawdown;
+    }
+    
+    return {
+        dailyVolatility: dailyVol,
+        annualizedVolatility: annualizedVol,
+        sharpeRatio: sharpe,
+        maxDrawdown: maxDrawdown,
+        averageReturn: mean
+    };
+}
+
+function calculateCorrelation(data1, data2) {
+    const minLen = Math.min(data1.length, data2.length);
+    const r1 = data1.slice(0, minLen).map(d => d.dailyReturn);
+    const r2 = data2.slice(0, minLen).map(d => d.dailyReturn);
+    
+    const n = minLen;
+    const m1 = r1.reduce((a, b) => a + b, 0) / n;
+    const m2 = r2.reduce((a, b) => a + b, 0) / n;
+    
+    let num = 0, den1 = 0, den2 = 0;
+    for (let i = 0; i < n; i++) {
+        num += (r1[i] - m1) * (r2[i] - m2);
+        den1 += Math.pow(r1[i] - m1, 2);
+        den2 += Math.pow(r2[i] - m2, 2);
+    }
+    
+    return num / (Math.sqrt(den1) * Math.sqrt(den2));
+}
+
+const mockUsers = [
+    { id: 1, username: 'admin', realName: '系统管理员', email: 'admin@stock.com', role: '管理员', enabled: true, createTime: '2024-01-01 10:00:00' },
+    { id: 2, username: 'analyst01', realName: '张分析师', email: 'zhang@stock.com', role: '分析师', enabled: true, createTime: '2024-01-15 14:30:00' },
+    { id: 3, username: 'analyst02', realName: '李研究员', email: 'li@stock.com', role: '分析师', enabled: true, createTime: '2024-02-01 09:15:00' },
+    { id: 4, username: 'viewer01', realName: '王查看', email: 'wang@stock.com', role: '访客', enabled: false, createTime: '2024-02-10 16:45:00' },
+    { id: 5, username: 'manager01', realName: '赵经理', email: 'zhao@stock.com', role: '管理员', enabled: true, createTime: '2024-03-01 11:20:00' }
+];
+
+const mockRoles = [
+    { id: 1, name: '超级管理员', code: 'ADMIN', description: '拥有系统所有权限', userCount: 2, createTime: '2024-01-01 10:00:00' },
+    { id: 2, name: '股票分析师', code: 'ANALYST', description: '可进行数据分析和查看报告', userCount: 2, createTime: '2024-01-01 10:00:00' },
+    { id: 3, name: '普通用户', code: 'VIEWER', description: '只能查看已有数据', userCount: 1, createTime: '2024-01-01 10:00:00' }
+];
+
+const mockPermissions = [
+    { id: 1, name: '查看股票', code: 'stock:view' },
+    { id: 2, name: '分析股票', code: 'stock:analysis' },
+    { id: 3, name: '管理用户', code: 'user:manage' },
+    { id: 4, name: '管理角色', code: 'role:manage' },
+    { id: 5, name: '查看日志', code: 'log:view' },
+    { id: 6, name: '系统配置', code: 'config:manage' },
+    { id: 7, name: '定时任务', code: 'task:manage' }
+];
+
+const mockLogs = [
+    { id: 1, username: 'admin', operation: '用户登录', ip: '192.168.1.100', method: 'POST', status: '成功', costTime: 156, createTime: '2024-12-20 09:30:15' },
+    { id: 2, username: 'admin', operation: '查看股票列表', ip: '192.168.1.100', method: 'GET', status: '成功', costTime: 45, createTime: '2024-12-20 09:31:20' },
+    { id: 3, username: 'analyst01', operation: '执行K线分析', ip: '192.168.1.101', method: 'GET', status: '成功', costTime: 234, createTime: '2024-12-20 10:15:30' },
+    { id: 4, username: 'admin', operation: '新增用户', ip: '192.168.1.100', method: 'POST', status: '成功', costTime: 89, createTime: '2024-12-20 11:00:45' },
+    { id: 5, username: 'viewer01', operation: '尝试修改配置', ip: '192.168.1.102', method: 'PUT', status: '失败', costTime: 12, createTime: '2024-12-20 11:30:00' },
+    { id: 6, username: 'admin', operation: '更新系统配置', ip: '192.168.1.100', method: 'PUT', status: '成功', costTime: 67, createTime: '2024-12-20 14:20:10' },
+    { id: 7, username: 'analyst02', operation: '导出分析报告', ip: '192.168.1.103', method: 'GET', status: '成功', costTime: 1500, createTime: '2024-12-20 15:45:30' },
+    { id: 8, username: 'admin', operation: '执行定时任务', ip: '127.0.0.1', method: 'POST', status: '成功', costTime: 5600, createTime: '2024-12-20 16:00:00' }
+];
+
+const mockTasks = [
+    { id: 1, name: '每日股票数据更新', cron: '0 0 2 * * ?', description: '每天凌晨2点更新所有股票数据', status: '运行中', lastExecuteTime: '2024-12-20 02:00:00' },
+    { id: 2, name: '相关性计算任务', cron: '0 0 3 * * ?', description: '每天凌晨3点计算股票相关性', status: '运行中', lastExecuteTime: '2024-12-20 03:00:00' },
+    { id: 3, name: '波动率指标刷新', cron: '0 */30 * * * ?', description: '每30分钟刷新波动率指标', status: '已停止', lastExecuteTime: '2024-12-19 18:30:00' },
+    { id: 4, name: '日志归档任务', cron: '0 0 0 1 * ?', description: '每月1号归档历史日志', status: '运行中', lastExecuteTime: '2024-12-01 00:00:00' },
+    { id: 5, name: '系统健康检查', cron: '0 */5 * * * ?', description: '每5分钟检查系统健康状态', status: '运行中', lastExecuteTime: '2024-12-20 16:55:00' }
+];
+
+new Vue({
+    el: '#app',
+    data() {
+        return {
+            activeMenu: 'stock-analysis',
+            allStocks: stockList,
+            selectedStock: null,
+            compareStocks: [],
+            timeRange: '1Y',
+            chartType: 'kline',
+            loading: false,
+            volatilityData: null,
+            stockDataCache: {},
+            chartInstance: null,
+            users: mockUsers,
+            userSearch: '',
+            filteredUsers: mockUsers,
+            roles: mockRoles,
+            permissions: mockPermissions,
+            operationLogs: mockLogs,
+            logDateRange: [],
+            scheduledTasks: mockTasks,
+            configTab: 'basic',
+            basicConfig: {
+                systemName: '股票量化分析系统',
+                systemLogo: '📈',
+                version: '1.0.0',
+                dataRetentionDays: 365,
+                maxFileSize: 10,
+                enableRegister: false
+            },
+            dataSourceConfig: {
+                sourceType: 'mock',
+                apiKey: '',
+                updateFrequency: 'daily'
+            },
+            emailConfig: {
+                smtpHost: 'smtp.example.com',
+                smtpPort: 465,
+                fromEmail: 'noreply@stock.com',
+                enableSSL: true
+            }
+        };
+    },
+    computed: {
+        successLogCount() {
+            return this.operationLogs.filter(l => l.status === '成功').length;
+        },
+        failLogCount() {
+            return this.operationLogs.filter(l => l.status === '失败').length;
+        },
+        runningTaskCount() {
+            return this.scheduledTasks.filter(t => t.status === '运行中').length;
+        },
+        stoppedTaskCount() {
+            return this.scheduledTasks.filter(t => t.status === '已停止').length;
+        }
+    },
+    mounted() {
+        this.selectedStock = this.allStocks[0];
+        this.compareStocks = this.allStocks.slice(1, 5);
+        setTimeout(() => {
+            this.initChart();
+            this.loadData();
+        }, 100);
+        window.addEventListener('resize', () => {
+            this.chartInstance && this.chartInstance.resize();
+        });
+    },
+    methods: {
+        handleMenuSelect(index) {
+            this.activeMenu = index;
+            if (index === 'stock-analysis') {
+                setTimeout(() => {
+                    this.initChart();
+                    this.loadData();
+                }, 100);
+            }
+        },
+        initChart() {
+            const el = this.$refs.chartRef;
+            if (el && !this.chartInstance) {
+                this.chartInstance = echarts.init(el);
+            } else if (el && this.chartInstance) {
+                this.chartInstance.resize();
+            }
+        },
+        onStockChange() {
+            this.loadData();
+        },
+        getChartTitle() {
+            const stockName = this.selectedStock ? this.selectedStock.code + ' ' + this.selectedStock.name : '';
+            switch (this.chartType) {
+                case 'kline': return stockName + ' K线图';
+                case 'return': return '累计收益率对比';
+                case 'correlation': return '相关性热力图';
+                case 'riskReturn': return '风险收益散点图';
+                default: return '图表';
+            }
+        },
+        getStockData(stock, startDate, endDate) {
+            const key = stock.code + '_' + startDate + '_' + endDate;
+            if (!this.stockDataCache[key]) {
+                const seedOffset = this.allStocks.findIndex(s => s.code === stock.code);
+                this.stockDataCache[key] = generateStockData(stock, startDate, endDate, seedOffset);
+            }
+            return this.stockDataCache[key];
+        },
+        loadData() {
+            if (!this.selectedStock && this.chartType === 'kline') {
+                this.$message.warning('请先选择一只股票');
+                return;
+            }
+            this.loading = true;
+            const { startDate, endDate } = getDateRange(this.timeRange);
+            
+            setTimeout(() => {
+                try {
+                    if (this.chartType === 'kline') {
+                        this.loadKLineData(startDate, endDate);
+                        this.loadVolatilityData(startDate, endDate);
+                    } else if (this.chartType === 'return') {
+                        this.loadReturnData(startDate, endDate);
+                        this.volatilityData = null;
+                    } else if (this.chartType === 'correlation') {
+                        this.loadCorrelationData(startDate, endDate);
+                        this.volatilityData = null;
+                    } else if (this.chartType === 'riskReturn') {
+                        this.loadRiskReturnData(startDate, endDate);
+                        this.volatilityData = null;
+                    }
+                } catch (e) {
+                    this.$message.error('加载数据失败');
+                    console.error(e);
+                } finally {
+                    this.loading = false;
+                }
+            }, 200);
+        },
+        loadKLineData(startDate, endDate) {
+            const data = this.getStockData(this.selectedStock, startDate, endDate);
+            const dates = data.map(d => d.date);
+            const klineData = data.map(d => [d.open, d.close, d.low, d.high]);
+            const volumes = data.map(d => d.volume);
+            const volumeColors = data.map(d => d.close >= d.open ? '#ef5350' : '#26a69a');
+            
+            const option = {
+                tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
+                legend: { data: ['K线', '成交量'], top: 0 },
+                grid: [
+                    { left: '10%', right: '8%', top: '10%', height: '50%' },
+                    { left: '10%', right: '8%', top: '72%', height: '16%' }
+                ],
+                xAxis: [
+                    { type: 'category', data: dates, gridIndex: 0, axisLine: { onZero: false } },
+                    { type: 'category', data: dates, gridIndex: 1, axisLine: { onZero: false } }
+                ],
+                yAxis: [
+                    { scale: true, gridIndex: 0, splitArea: { show: true } },
+                    { scale: true, gridIndex: 1, splitNumber: 2 }
+                ],
+                dataZoom: [
+                    { type: 'inside', xAxisIndex: [0, 1], start: 0, end: 100 },
+                    { show: true, xAxisIndex: [0, 1], type: 'slider', bottom: '2%', start: 0, end: 100 }
+                ],
+                series: [
+                    {
+                        name: 'K线', type: 'candlestick', data: klineData,
+                        itemStyle: { color: '#ef5350', color0: '#26a69a' }
+                    },
+                    {
+                        name: '成交量', type: 'bar', xAxisIndex: 1, yAxisIndex: 1,
+                        data: volumes.map((v, i) => ({ value: v, itemStyle: { color: volumeColors[i] } }))
+                    }
+                ]
+            };
+            this.chartInstance.setOption(option, true);
+        },
+        loadVolatilityData(startDate, endDate) {
+            const data = this.getStockData(this.selectedStock, startDate, endDate);
+            this.volatilityData = calculateVolatility(data);
+        },
+        loadReturnData(startDate, endDate) {
+            const stocks = [this.selectedStock, ...this.compareStocks].filter(Boolean);
+            if (stocks.length === 0) {
+                this.$message.warning('请选择股票');
+                return;
+            }
+            
+            const allData = [];
+            const legends = [];
+            
+            stocks.forEach((stock, i) => {
+                const data = this.getStockData(stock, startDate, endDate);
+                let cumReturn = 0;
+                const seriesData = data.map((d, idx) => {
+                    if (idx === 0) {
+                        cumReturn = d.dailyReturn;
+                    } else {
+                        cumReturn = (1 + cumReturn) * (1 + d.dailyReturn) - 1;
+                    }
+                    return [d.date, cumReturn * 100];
+                });
+                legends.push(stock.name);
+                allData.push({
+                    name: stock.name,
+                    data: seriesData,
+                    color: stockColors[i % stockColors.length]
+                });
+            });
+            
+            const allDates = allData.length > 0 ? allData[0].data.map(d => d[0]) : [];
+            const option = {
+                tooltip: {
+                    trigger: 'axis',
+                    formatter: (params) => {
+                        let html = params[0].axisValue + '<br/>';
+                        params.forEach(p => {
+                            html += p.marker + ' ' + p.seriesName + ': ' + p.value[1].toFixed(2) + '%<br/>';
+                        });
+                        return html;
+                    }
+                },
+                legend: { data: legends, top: 0 },
+                grid: { left: '10%', right: '8%', top: '10%', bottom: '10%' },
+                xAxis: { type: 'category', boundaryGap: false, data: allDates },
+                yAxis: { type: 'value', axisLabel: { formatter: '{value}%' } },
+                dataZoom: [
+                    { type: 'inside', start: 0, end: 100 },
+                    { show: true, type: 'slider', bottom: '2%', start: 0, end: 100 }
+                ],
+                series: allData.map(d => ({
+                    name: d.name, type: 'line', data: d.data.map(x => x[1]), smooth: true,
+                    lineStyle: { color: d.color, width: 2 },
+                    itemStyle: { color: d.color }
+                }))
+            };
+            this.chartInstance.setOption(option, true);
+        },
+        loadCorrelationData(startDate, endDate) {
+            const stocks = [this.selectedStock, ...this.compareStocks].filter(Boolean);
+            if (stocks.length < 2) {
+                this.$message.warning('请至少选择2只股票进行相关性分析');
+                return;
+            }
+            
+            const names = stocks.map(s => s.name);
+            const heatmapData = [];
+            
+            for (let i = 0; i < stocks.length; i++) {
+                for (let j = 0; j < stocks.length; j++) {
+                    let corr = 1;
+                    if (i !== j) {
+                        const data1 = this.getStockData(stocks[i], startDate, endDate);
+                        const data2 = this.getStockData(stocks[j], startDate, endDate);
+                        corr = calculateCorrelation(data1, data2);
+                    }
+                    heatmapData.push([j, i, parseFloat(corr.toFixed(4))]);
+                }
+            }
+            
+            const option = {
+                tooltip: {
+                    formatter: (params) => names[params.value[1]] + ' × ' + names[params.value[0]] +
+                                         '<br/>相关系数: ' + params.value[2]
+                },
+                grid: { left: '15%', right: '10%', top: '5%', bottom: '15%' },
+                xAxis: {
+                    type: 'category', data: names,
+                    axisLabel: { rotate: 45, interval: 0 }
+                },
+                yAxis: { type: 'category', data: names },
+                visualMap: {
+                    min: -1, max: 1, calculable: true,
+                    orient: 'horizontal', left: 'center', bottom: '0%',
+                    inRange: { color: ['#26a69a', '#ffffff', '#ef5350'] }
+                },
+                series: [{
+                    type: 'heatmap', data: heatmapData,
+                    label: { show: true, fontSize: 10, formatter: (p) => p.value[2].toFixed(2) },
+                    emphasis: { itemStyle: { shadowBlur: 10, shadowColor: 'rgba(0, 0, 0, 0.5)' } }
+                }]
+            };
+            this.chartInstance.setOption(option, true);
+        },
+        loadRiskReturnData(startDate, endDate) {
+            const stocks = [this.selectedStock, ...this.compareStocks].filter(Boolean);
+            if (stocks.length === 0) {
+                this.$message.warning('请选择股票');
+                return;
+            }
+            
+            const scatterData = stocks.map((stock, i) => {
+                const data = this.getStockData(stock, startDate, endDate);
+                const vol = calculateVolatility(data);
+                return {
+                    name: stock.name,
+                    value: [vol.annualizedVolatility * 100, vol.averageReturn * 252 * 100],
+                    itemStyle: { color: stockColors[i % stockColors.length] }
+                };
+            });
+            
+            const option = {
+                tooltip: {
+                    formatter: (params) => params.name + '<br/>风险(年化波动): ' + 
+                                         params.value[0].toFixed(2) + '%<br/>年化收益: ' + 
+                                         params.value[1].toFixed(2) + '%'
+                },
+                grid: { left: '10%', right: '10%', top: '5%', bottom: '10%' },
+                xAxis: {
+                    name: '风险 (年化波动率 %)', type: 'value', scale: true,
+                    axisLabel: { formatter: '{value}%' }
+                },
+                yAxis: {
+                    name: '年化收益 (%)', type: 'value', scale: true,
+                    axisLabel: { formatter: '{value}%' }
+                },
+                series: [{
+                    type: 'scatter', data: scatterData, symbolSize: 20,
+                    label: {
+                        show: true, position: 'top',
+                        formatter: (p) => p.name, fontSize: 12
+                    },
+                    markLine: {
+                        silent: true, lineStyle: { type: 'dashed' },
+                        data: [
+                            { xAxis: 0, label: { formatter: '收益轴' } },
+                            { yAxis: 0, label: { formatter: '风险轴' } }
+                        ]
+                    }
+                }]
+            };
+            this.chartInstance.setOption(option, true);
+        },
+        searchUsers() {
+            const keyword = this.userSearch.toLowerCase();
+            if (!keyword) {
+                this.filteredUsers = this.users;
+            } else {
+                this.filteredUsers = this.users.filter(u => 
+                    u.username.toLowerCase().includes(keyword) ||
+                    u.realName.toLowerCase().includes(keyword) ||
+                    u.email.toLowerCase().includes(keyword)
+                );
+            }
+        },
+        showAddUserDialog() {
+            this.$message.info('新增用户对话框 - 演示模式');
+        },
+        editUser(row) {
+            this.$message.info('编辑用户: ' + row.username);
+        },
+        deleteUser(row) {
+            this.$confirm('确定删除用户 ' + row.username + '?', '提示', {
+                confirmButtonText: '确定',
+                cancelButtonText: '取消',
+                type: 'warning'
+            }).then(() => {
+                const idx = this.users.findIndex(u => u.id === row.id);
+                if (idx > -1) {
+                    this.users.splice(idx, 1);
+                    this.searchUsers();
+                    this.$message.success('删除成功');
+                }
+            }).catch(() => {});
+        },
+        toggleUserStatus(row) {
+            this.$message.success(row.username + ' 状态已更新');
+        },
+        showAddRoleDialog() {
+            this.$message.info('新增角色对话框 - 演示模式');
+        },
+        assignPermissions(row) {
+            this.$message.info('分配权限给角色: ' + row.name);
+        },
+        deleteRole(row) {
+            this.$confirm('确定删除角色 ' + row.name + '?', '提示', {
+                confirmButtonText: '确定',
+                cancelButtonText: '取消',
+                type: 'warning'
+            }).then(() => {
+                this.$message.success('删除成功');
+            }).catch(() => {});
+        },
+        showAddConfigDialog() {
+            this.$message.info('新增配置对话框 - 演示模式');
+        },
+        saveConfig() {
+            this.$message.success('配置保存成功');
+        },
+        testConnection() {
+            this.$message.success('连接测试成功');
+        },
+        testEmail() {
+            this.$message.success('测试邮件发送成功');
+        },
+        showAddTaskDialog() {
+            this.$message.info('新增任务对话框 - 演示模式');
+        },
+        toggleTask(row) {
+            row.status = row.status === '运行中' ? '已停止' : '运行中';
+            this.$message.success('任务状态已更新');
+        },
+        executeTask(row) {
+            this.$message.info('正在执行任务: ' + row.name);
+        },
+        deleteTask(row) {
+            this.$confirm('确定删除任务 ' + row.name + '?', '提示', {
+                confirmButtonText: '确定',
+                cancelButtonText: '取消',
+                type: 'warning'
+            }).then(() => {
+                const idx = this.scheduledTasks.findIndex(t => t.id === row.id);
+                if (idx > -1) {
+                    this.scheduledTasks.splice(idx, 1);
+                    this.$message.success('删除成功');
+                }
+            }).catch(() => {});
+        }
+    }
+});
+</script>
+</body>
+</html>
