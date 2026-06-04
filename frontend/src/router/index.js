@@ -114,6 +114,36 @@ const routes = [
         name: 'GovernanceMarketOverview',
         component: () => import('@/views/governance/MarketOverview.vue'),
         meta: { permission: 'governance:overview:view' }
+      },
+      {
+        path: '/statistics/status',
+        name: 'DataStatus',
+        component: () => import('@/views/statistics/DataStatus.vue'),
+        meta: { permission: 'statistics:status:view' }
+      },
+      {
+        path: '/statistics/logs',
+        name: 'CollectionLog',
+        component: () => import('@/views/statistics/CollectionLog.vue'),
+        meta: { permission: 'statistics:logs:view' }
+      },
+      {
+        path: '/statistics/favorite',
+        name: 'FavoriteCenter',
+        component: () => import('@/views/statistics/FavoriteCenter.vue'),
+        meta: { requiresAuth: true }
+      },
+      {
+        path: '/quant/correlation',
+        name: 'CorrelationAnalysis',
+        component: () => import('@/views/quant/CorrelationAnalysis.vue'),
+        meta: { permission: 'quant:correlation:view' }
+      },
+      {
+        path: '/quant/linkage',
+        name: 'LinkageAnalysis',
+        component: () => import('@/views/quant/LinkageAnalysis.vue'),
+        meta: { permission: 'quant:linkage:view' }
       }
     ]
   }

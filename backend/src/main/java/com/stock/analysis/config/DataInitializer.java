@@ -8,6 +8,7 @@ import org.springframework.stereotype.Component;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Component
 public class DataInitializer implements CommandLineRunner {
@@ -29,6 +30,10 @@ public class DataInitializer implements CommandLineRunner {
     private final GovernanceMarketDataRepository governanceMarketDataRepository;
     private final GovernanceFinancialDataRepository governanceFinancialDataRepository;
     private final GovernanceMarketOverviewRepository governanceMarketOverviewRepository;
+    private final CollectionLogRepository collectionLogRepository;
+    private final SectorInfoRepository sectorInfoRepository;
+    private final IndexDataRepository indexDataRepository;
+    private final QuantCalculationResultRepository quantResultRepository;
     private final org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
     private final Random random = new Random(42);
 
@@ -49,6 +54,10 @@ public class DataInitializer implements CommandLineRunner {
                            GovernanceMarketDataRepository governanceMarketDataRepository,
                            GovernanceFinancialDataRepository governanceFinancialDataRepository,
                            GovernanceMarketOverviewRepository governanceMarketOverviewRepository,
+                           CollectionLogRepository collectionLogRepository,
+                           SectorInfoRepository sectorInfoRepository,
+                           IndexDataRepository indexDataRepository,
+                           QuantCalculationResultRepository quantResultRepository,
                            org.springframework.security.crypto.password.PasswordEncoder passwordEncoder) {
         this.stockInfoRepository = stockInfoRepository;
         this.userRepository = userRepository;
@@ -67,6 +76,10 @@ public class DataInitializer implements CommandLineRunner {
         this.governanceMarketDataRepository = governanceMarketDataRepository;
         this.governanceFinancialDataRepository = governanceFinancialDataRepository;
         this.governanceMarketOverviewRepository = governanceMarketOverviewRepository;
+        this.collectionLogRepository = collectionLogRepository;
+        this.sectorInfoRepository = sectorInfoRepository;
+        this.indexDataRepository = indexDataRepository;
+        this.quantResultRepository = quantResultRepository;
         this.passwordEncoder = passwordEncoder;
     }
 
@@ -90,6 +103,9 @@ public class DataInitializer implements CommandLineRunner {
         initGovernanceMarketData();
         initGovernanceFinancialData();
         initGovernanceMarketOverviewData();
+        initCollectionLogData();
+        initSectorData();
+        initIndexData();
     }
 
     private void initStockData() {
@@ -179,6 +195,9 @@ public class DataInitializer implements CommandLineRunner {
         List<Permission> perms = List.of(
             createPerm("查看股票", "stock:view", "查看股票数据", "stock"),
             createPerm("分析股票", "stock:analysis", "进行股票分析", "stock"),
+            createPerm("查看量化计算", "quant:view", "查看量化计算菜单", "quant"),
+            createPerm("相关性分析", "quant:correlation:view", "进行相关性分析", "quant"),
+            createPerm("联动性分析", "quant:linkage:view", "进行联动性分析", "quant"),
             createPerm("查看用户", "user:view", "查看用户列表", "user"),
             createPerm("新增用户", "user:add", "新增用户", "user"),
             createPerm("编辑用户", "user:edit", "编辑用户", "user"),
@@ -206,7 +225,9 @@ public class DataInitializer implements CommandLineRunner {
             createPerm("治理基础信息", "governance:basic:view", "治理基础信息", "governance"),
             createPerm("治理行情数据", "governance:market:view", "治理行情数据", "governance"),
             createPerm("治理财务数据", "governance:financial:view", "治理财务数据", "governance"),
-            createPerm("治理市场数据", "governance:overview:view", "治理市场数据", "governance")
+            createPerm("治理市场数据", "governance:overview:view", "治理市场数据", "governance"),
+            createPerm("查看数据状态", "statistics:status:view", "查看数据状态", "statistics"),
+            createPerm("查看采集日志", "statistics:logs:view", "查看采集日志", "statistics")
         );
         permissionRepository.saveAll(perms);
     }
@@ -224,13 +245,17 @@ public class DataInitializer implements CommandLineRunner {
         if (menuRepository.count() > 0) return;
 
         Menu analysisParent = createMenu("数据分析", "/analysis", null, "DataAnalysis", 1, null, "MENU", "stock:view");
-        Menu collectionParent = createMenu("数据采集类型", "/collection", null, "Download", 2, null, "MENU", null);
-        Menu governanceParent = createMenu("数据治理", "/governance", null, "Edit", 3, null, "MENU", null);
-        Menu configParent = createMenu("系统管理", "/system", null, "Tools", 4, null, "MENU", null);
-        menuRepository.saveAll(List.of(analysisParent, collectionParent, governanceParent, configParent));
+        Menu quantParent = createMenu("基础量化计算", "/quant", null, "Calculator", 2, null, "MENU", "quant:view");
+        Menu collectionParent = createMenu("数据采集类型", "/collection", null, "Download", 3, null, "MENU", null);
+        Menu governanceParent = createMenu("数据治理", "/governance", null, "Edit", 4, null, "MENU", null);
+        Menu statisticsParent = createMenu("数据统计", "/statistics", null, "DataBoard", 5, null, "MENU", null);
+        Menu configParent = createMenu("系统管理", "/system", null, "Tools", 6, null, "MENU", null);
+        menuRepository.saveAll(List.of(analysisParent, quantParent, collectionParent, governanceParent, statisticsParent, configParent));
 
         List<Menu> subMenus = List.of(
             createMenu("股票分析", "/analysis/stock", "analysis/StockAnalysis", "TrendCharts", 1, analysisParent.getId(), "MENU", "stock:view"),
+            createMenu("相关性分析", "/quant/correlation", "quant/CorrelationAnalysis", "Connection", 1, quantParent.getId(), "MENU", "quant:correlation:view"),
+            createMenu("联动性分析", "/quant/linkage", "quant/LinkageAnalysis", "Share", 2, quantParent.getId(), "MENU", "quant:linkage:view"),
             createMenu("基础信息", "/collection/basic", "collection/BasicInfo", "Info", 1, collectionParent.getId(), "MENU", "collection:basic:view"),
             createMenu("行情数据", "/collection/market", "collection/MarketData", "DataLine", 2, collectionParent.getId(), "MENU", "collection:market:view"),
             createMenu("财务数据", "/collection/financial", "collection/FinancialData", "Data", 3, collectionParent.getId(), "MENU", "collection:financial:view"),
@@ -239,6 +264,8 @@ public class DataInitializer implements CommandLineRunner {
             createMenu("行情数据", "/governance/market", "governance/MarketData", "DataLine", 2, governanceParent.getId(), "MENU", "governance:market:view"),
             createMenu("财务数据", "/governance/financial", "governance/FinancialData", "Data", 3, governanceParent.getId(), "MENU", "governance:financial:view"),
             createMenu("市场数据", "/governance/overview", "governance/MarketOverview", "PieChart", 4, governanceParent.getId(), "MENU", "governance:overview:view"),
+            createMenu("数据状态", "/statistics/status", "statistics/DataStatus", "DataLine", 1, statisticsParent.getId(), "MENU", "statistics:status:view"),
+            createMenu("采集日志", "/statistics/logs", "statistics/CollectionLog", "DocumentChecked", 2, statisticsParent.getId(), "MENU", "statistics:logs:view"),
             createMenu("用户管理", "/system/user", "system/UserManagement", "User", 1, configParent.getId(), "MENU", "user:view"),
             createMenu("角色权限", "/system/role", "system/RolePermission", "UserFilled", 2, configParent.getId(), "MENU", "role:view"),
             createMenu("菜单管理", "/system/menu", "system/MenuManagement", "Menu", 3, configParent.getId(), "MENU", "menu:view"),
@@ -945,5 +972,140 @@ public class DataInitializer implements CommandLineRunner {
         }
 
         governanceMarketOverviewRepository.saveAll(allData);
+    }
+
+    private void initCollectionLogData() {
+        if (collectionLogRepository.count() > 0) return;
+
+        List<CollectionLog> logs = List.of(
+            createCollectionLog("basic", "000001", "平安银行", "成功", null, "system"),
+            createCollectionLog("basic", "600519", "贵州茅台", "成功", null, "system"),
+            createCollectionLog("market", "000001", "平安银行", "失败", "网络连接超时，请稍后重试", "system"),
+            createCollectionLog("market", "600519", "贵州茅台", "成功", null, "system"),
+            createCollectionLog("financial", "000001", "平安银行", "失败", "数据格式解析错误", "admin"),
+            createCollectionLog("financial", "600036", "招商银行", "成功", null, "admin"),
+            createCollectionLog("overview", null, null, "成功", null, "system"),
+            createCollectionLog("market", "002594", "比亚迪", "失败", "API请求频率超限", "system"),
+            createCollectionLog("basic", "300750", "宁德时代", "重试中", null, "admin"),
+            createCollectionLog("financial", "000858", "五粮液", "失败", "报表数据不完整", "system")
+        );
+        collectionLogRepository.saveAll(logs);
+    }
+
+    private CollectionLog createCollectionLog(String dataType, String code, String name, String status, String errorMessage, String operator) {
+        CollectionLog log = new CollectionLog();
+        log.setDataType(dataType);
+        log.setCode(code);
+        log.setName(name);
+        log.setStatus(status);
+        log.setErrorMessage(errorMessage);
+        log.setRetryCount("重试中".equals(status) ? 1 : 0);
+        log.setOperator(operator);
+        log.setCreateTime(LocalDateTime.now().minusMinutes(random.nextInt(1440)));
+        log.setUpdateTime(LocalDateTime.now());
+        return log;
+    }
+
+    private void initSectorData() {
+        if (sectorInfoRepository.count() > 0) return;
+
+        List<SectorInfo> sectors = List.of(
+            createSector("SEC001", "银行", "INDUSTRY", "000001,600036", 2),
+            createSector("SEC002", "房地产", "INDUSTRY", "000002", 1),
+            createSector("SEC003", "食品饮料", "INDUSTRY", "600519,000858", 2),
+            createSector("SEC004", "非银金融", "INDUSTRY", "601318", 1),
+            createSector("SEC005", "汽车", "INDUSTRY", "002594", 1),
+            createSector("SEC006", "有色金属", "INDUSTRY", "601899", 1),
+            createSector("SEC007", "电子", "INDUSTRY", "002415", 1),
+            createSector("SEC008", "电力设备", "INDUSTRY", "300750", 1),
+            createSector("SEC009", "金融", "CONCEPT", "000001,600036,601318", 3),
+            createSector("SEC010", "消费", "CONCEPT", "600519,000858,002594", 3),
+            createSector("SEC011", "科技", "CONCEPT", "002415,300750", 2),
+            createSector("SEC012", "资源", "CONCEPT", "601899", 1)
+        );
+        sectorInfoRepository.saveAll(sectors);
+    }
+
+    private SectorInfo createSector(String code, String name, String type, String stockCodes, int count) {
+        SectorInfo sector = new SectorInfo();
+        sector.setSectorCode(code);
+        sector.setSectorName(name);
+        sector.setSectorType(type);
+        sector.setStockCodes(stockCodes);
+        sector.setStockCount(count);
+        return sector;
+    }
+
+    private void initIndexData() {
+        if (indexDataRepository.count() > 0) return;
+
+        String[][] indices = {
+            {"000001", "上证指数"},
+            {"399001", "深证成指"},
+            {"399006", "创业板指"},
+            {"000300", "沪深300"},
+            {"000016", "上证50"},
+            {"000688", "科创50"},
+            {"000905", "中证500"}
+        };
+
+        LocalDate startDate = LocalDate.of(2023, 1, 1);
+        LocalDate endDate = LocalDate.of(2024, 12, 31);
+
+        for (String[] index : indices) {
+            generateIndexData(index[0], index[1], startDate, endDate);
+        }
+    }
+
+    private void generateIndexData(String code, String name, LocalDate startDate, LocalDate endDate) {
+        List<IndexData> dataList = new ArrayList<>();
+        double basePrice = switch (code) {
+            case "000001" -> 3100.0;
+            case "399001" -> 10000.0;
+            case "399006" -> 2000.0;
+            case "000300" -> 3500.0;
+            case "000016" -> 2400.0;
+            case "000688" -> 850.0;
+            case "000905" -> 6000.0;
+            default -> 1000.0;
+        };
+
+        double currentPrice = basePrice;
+        double previousClose = basePrice;
+
+        LocalDate current = startDate;
+        while (!current.isAfter(endDate)) {
+            int dayOfWeek = current.getDayOfWeek().getValue();
+            if (dayOfWeek <= 5) {
+                double change = (random.nextGaussian() * 0.015) + 0.0003;
+                double open = currentPrice * (1 + random.nextGaussian() * 0.005);
+                double close = currentPrice * (1 + change);
+                double high = Math.max(open, close) * (1 + Math.abs(random.nextGaussian() * 0.008));
+                double low = Math.min(open, close) * (1 - Math.abs(random.nextGaussian() * 0.008));
+                long volume = (long) (5000000000L + random.nextDouble() * 10000000000L);
+                double turnover = volume * ((high + low) / 2);
+                double dailyReturn = previousClose != 0 ? (close - previousClose) / previousClose : 0;
+                double changePercent = dailyReturn * 100;
+
+                IndexData data = new IndexData();
+                data.setIndexCode(code);
+                data.setIndexName(name);
+                data.setTradeDate(current);
+                data.setOpenPrice(Math.round(open * 100.0) / 100.0);
+                data.setHighPrice(Math.round(high * 100.0) / 100.0);
+                data.setLowPrice(Math.round(low * 100.0) / 100.0);
+                data.setClosePrice(Math.round(close * 100.0) / 100.0);
+                data.setChangePercent(Math.round(changePercent * 100.0) / 100.0);
+                data.setVolume(volume);
+                data.setTurnover(Math.round(turnover * 100.0) / 100.0);
+                data.setDailyReturn(Math.round(dailyReturn * 10000.0) / 10000.0);
+
+                dataList.add(data);
+                previousClose = close;
+                currentPrice = close;
+            }
+            current = current.plusDays(1);
+        }
+        indexDataRepository.saveAll(dataList);
     }
 }

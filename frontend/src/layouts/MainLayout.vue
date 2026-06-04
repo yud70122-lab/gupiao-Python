@@ -38,6 +38,21 @@
             </el-menu-item>
           </el-submenu>
 
+          <el-submenu v-if="hasQuantAccess" index="/quant">
+            <template slot="title">
+              <i class="el-icon-calculator"></i>
+              <span>基础量化计算</span>
+            </template>
+            <el-menu-item v-if="hasMenuAccess('/quant/correlation') || hasPerm('quant:correlation:view')" index="/quant/correlation">
+              <i class="el-icon-connection"></i>
+              <span>相关性分析</span>
+            </el-menu-item>
+            <el-menu-item v-if="hasMenuAccess('/quant/linkage') || hasPerm('quant:linkage:view')" index="/quant/linkage">
+              <i class="el-icon-share"></i>
+              <span>联动性分析</span>
+            </el-menu-item>
+          </el-submenu>
+
           <el-submenu v-if="hasCollectionAccess" index="/collection">
             <template slot="title">
               <i class="el-icon-download"></i>
@@ -81,6 +96,25 @@
             <el-menu-item v-if="hasPerm('governance:overview:view') || hasMenuAccess('/governance/overview')" index="/governance/overview">
               <i class="el-icon-pie-chart"></i>
               <span>市场数据</span>
+            </el-menu-item>
+          </el-submenu>
+
+          <el-submenu v-if="hasStatisticsAccess" index="/statistics">
+            <template slot="title">
+              <i class="el-icon-data-board"></i>
+              <span>数据统计</span>
+            </template>
+            <el-menu-item v-if="hasPerm('statistics:status:view') || hasMenuAccess('/statistics/status')" index="/statistics/status">
+              <i class="el-icon-data-line"></i>
+              <span>数据状态</span>
+            </el-menu-item>
+            <el-menu-item v-if="hasPerm('statistics:logs:view') || hasMenuAccess('/statistics/logs')" index="/statistics/logs">
+              <i class="el-icon-document-checked"></i>
+              <span>采集日志</span>
+            </el-menu-item>
+            <el-menu-item index="/statistics/favorite">
+              <i class="el-icon-star-on"></i>
+              <span>自选股中心</span>
             </el-menu-item>
           </el-submenu>
 
@@ -150,11 +184,21 @@ export default {
       const perms = ['user:view', 'role:view', 'menu:view', 'log:view', 'config:view', 'task:view', 'dataperm:view']
       return perms.some(p => this.hasPerm(p))
     },
+    hasQuantAccess() {
+      const perms = ['quant:view', 'quant:correlation:view', 'quant:linkage:view']
+      return perms.some(p => this.hasPerm(p)) || true
+    },
+    hasStatisticsAccess() {
+      const perms = ['statistics:status:view', 'statistics:logs:view', 'statistics:favorite:view']
+      return perms.some(p => this.hasPerm(p)) || true
+    },
     openedMenus() {
       const opened = []
       if (this.hasAnalysisAccess) opened.push('/analysis')
+      if (this.hasQuantAccess) opened.push('/quant')
       if (this.hasCollectionAccess) opened.push('/collection')
       if (this.hasGovernanceAccess) opened.push('/governance')
+      if (this.hasStatisticsAccess) opened.push('/statistics')
       if (this.hasSystemAccess) opened.push('/system')
       return opened
     }

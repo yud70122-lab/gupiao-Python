@@ -72,3 +72,10 @@ export const taskApi = {
   stop: (id) => api.put(`/tasks/${id}/stop`),
   execute: (id) => api.post(`/tasks/${id}/execute`)
 }
+
+export const statisticsApi = {
+  getDataStatus: () => api.get('/statistics/data-status'),
+  getCollectionLogs: (params) => api.get('/statistics/logs', { params }),
+  retryLog: (id) => api.post(`/statistics/logs/${id}/retry`),
+  retryBatch: (ids) => api.post('/statistics/logs/retry-batch', ids)
+}
