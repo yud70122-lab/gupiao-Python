@@ -21,3 +21,15 @@ pnpm-debug.log*
 *.njsproj
 *.sln
 *.sw?
+
+# 解压后的jdk、node目录
+jdk-17.0.2/
+node-v18.20.7-win-x64/
+
+# 安装包压缩文件
+jdk17.zip
+maven.zip
+node.zip
+
+# 所有zip安装包
+*.zip
