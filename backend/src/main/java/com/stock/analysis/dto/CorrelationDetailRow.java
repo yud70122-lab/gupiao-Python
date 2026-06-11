@@ -5,6 +5,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 @Data
 @NoArgsConstructor
@@ -21,4 +22,7 @@ public class CorrelationDetailRow {
     private Double pearsonCoefficient;
     private Double spearmanCoefficient;
     private String dataType;
+    private String correlationLevel;
+    private Integer sampleCount;
+    private LocalDateTime calculationTime;
 }

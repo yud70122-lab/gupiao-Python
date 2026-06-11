@@ -16,8 +16,17 @@ import org.apache.commons.math3.stat.correlation.SpearmansCorrelation;
 import org.apache.commons.math3.stat.descriptive.DescriptiveStatistics;
 import org.springframework.stereotype.Service;
 
+import java.io.ByteArrayOutputStream;
+import java.io.OutputStreamWriter;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -33,6 +42,12 @@ public class QuantCalculationService {
     private final PearsonsCorrelation pearsonsCorrelation = new PearsonsCorrelation();
     private final SpearmansCorrelation spearmansCorrelation = new SpearmansCorrelation();
 
+    private final ConcurrentHashMap<String, AsyncTaskState> asyncTasks = new ConcurrentHashMap<>();
+    private final ExecutorService asyncExecutor = Executors.newFixedThreadPool(4);
+
+    private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+    private static final DateTimeFormatter DATETIME_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
     public CorrelationAnalysisResponse calculateCorrelation(QuantRequest request) {
         log.info("开始计算相关性分析，股票代码: {}, 数据类型: {}, 计算模式: {}",
                 request.getStockCodes(), request.getDataType(), request.getCalculationMode());
@@ -47,6 +62,10 @@ public class QuantCalculationService {
         String dataType = request.getDataType();
         String calculationMode = request.getCalculationMode();
         Integer rollingWindow = request.getRollingWindow();
+        Integer rollingStep = request.getRollingStep() != null ? request.getRollingStep() : 1;
+        boolean outlierFilter = request.getOutlierFilter() != null ? request.getOutlierFilter() : true;
+        boolean useCache = request.getResultCache() != null ? request.getResultCache() : true;
+        String coefficientType = request.getCoefficientType() != null ? request.getCoefficientType() : "PEARSON";
 
         Map<String, List<StockInfo>> stockDataMap = new HashMap<>();
         Map<String, String> stockNameMap = new HashMap<>();
@@ -54,7 +73,7 @@ public class QuantCalculationService {
         for (String code : stockCodes) {
             List<StockInfo> data = stockInfoRepository.findByCodeAndTradeDateBetweenOrderByTradeDateAsc(
                     code, startDate, endDate);
-            data = cleanStockData(data);
+            data = cleanStockData(data, outlierFilter);
             stockDataMap.put(code, data);
             stockNameMap.put(code, stockInfoRepository.findNameByCode(code).orElse(code));
             log.debug("股票 {} 清洗后数据量: {}", code, data.size());
@@ -64,6 +83,8 @@ public class QuantCalculationService {
         List<CorrelationMatrixCell> correlationMatrix = new ArrayList<>();
         List<RollingCorrelationPoint> rollingCorrelation = new ArrayList<>();
         List<CorrelationDetailRow> detailRows = new ArrayList<>();
+        List<ScatterPoint> scatterData = new ArrayList<>();
+        LocalDateTime calcTime = LocalDateTime.now();
 
         for (int i = 0; i < stockCodes.size(); i++) {
             for (int j = i; j < stockCodes.size(); j++) {
@@ -84,9 +105,15 @@ public class QuantCalculationService {
                 double spearman = 0.0;
 
                 if (minLength > 2) {
-                    pearson = pearsonsCorrelation.correlation(alignedA, alignedB);
-                    spearman = spearmansCorrelation.correlation(alignedA, alignedB);
+                    if ("PEARSON".equals(coefficientType) || "BOTH".equals(coefficientType)) {
+                        pearson = pearsonsCorrelation.correlation(alignedA, alignedB);
+                    }
+                    if ("SPEARMAN".equals(coefficientType) || "BOTH".equals(coefficientType)) {
+                        spearman = spearmansCorrelation.correlation(alignedA, alignedB);
+                    }
                 }
+
+                double primaryCoeff = "SPEARMAN".equals(coefficientType) ? spearman : pearson;
 
                 if (i != j) {
                     CorrelationOverview overview = new CorrelationOverview();
@@ -99,12 +126,13 @@ public class QuantCalculationService {
                     overview.setDataType(dataType);
                     overview.setPearsonCoefficient(Math.round(pearson * 10000.0) / 10000.0);
                     overview.setSpearmanCoefficient(Math.round(spearman * 10000.0) / 10000.0);
-                    overview.setCorrelationDescription(getCorrelationDescription(pearson));
+                    overview.setCorrelationDescription(getCorrelationLevel(primaryCoeff));
+                    overview.setSampleCount(minLength);
                     overviews.add(overview);
 
                     saveQuantResult("CORRELATION", codeA, stockNameMap.get(codeA),
                             codeB, stockNameMap.get(codeB), startDate, endDate,
-                            dataType, "BOTH", pearson, spearman, null, null);
+                            dataType, coefficientType, pearson, spearman, null, null);
                 }
 
                 CorrelationMatrixCell matrixCell = new CorrelationMatrixCell();
@@ -130,21 +158,37 @@ public class QuantCalculationService {
         }
 
         if ("ROLLING".equals(calculationMode) && rollingWindow != null && rollingWindow > 0) {
-            String codeA = stockCodes.get(0);
-            String codeB = stockCodes.get(1);
-            List<StockInfo> dataA = stockDataMap.get(codeA);
-            List<StockInfo> dataB = stockDataMap.get(codeB);
+            for (int i = 0; i < stockCodes.size() - 1; i++) {
+                for (int j = i + 1; j < stockCodes.size(); j++) {
+                    String codeA = stockCodes.get(i);
+                    String codeB = stockCodes.get(j);
+                    List<StockInfo> dataA = stockDataMap.get(codeA);
+                    List<StockInfo> dataB = stockDataMap.get(codeB);
 
-            rollingCorrelation = calculateRollingCorrelation(
-                    dataA, dataB, dataType, rollingWindow, codeA, codeB,
-                    stockNameMap.get(codeA), stockNameMap.get(codeB), detailRows);
+                    rollingCorrelation.addAll(calculateRollingCorrelation(
+                            dataA, dataB, dataType, rollingWindow, rollingStep, codeA, codeB,
+                            stockNameMap.get(codeA), stockNameMap.get(codeB), detailRows, calcTime));
+                }
+            }
         } else if (stockCodes.size() >= 2) {
+            for (int i = 0; i < stockCodes.size() - 1; i++) {
+                for (int j = i + 1; j < stockCodes.size(); j++) {
+                    String codeA = stockCodes.get(i);
+                    String codeB = stockCodes.get(j);
+                    List<StockInfo> dataA = stockDataMap.get(codeA);
+                    List<StockInfo> dataB = stockDataMap.get(codeB);
+                    generateDetailRows(dataA, dataB, dataType, codeA, codeB,
+                            stockNameMap.get(codeA), stockNameMap.get(codeB), detailRows, 0, calcTime);
+                }
+            }
+        }
+
+        if (stockCodes.size() == 2) {
             String codeA = stockCodes.get(0);
             String codeB = stockCodes.get(1);
             List<StockInfo> dataA = stockDataMap.get(codeA);
             List<StockInfo> dataB = stockDataMap.get(codeB);
-            generateDetailRows(dataA, dataB, dataType, codeA, codeB,
-                    stockNameMap.get(codeA), stockNameMap.get(codeB), detailRows);
+            scatterData = generateScatterData(dataA, dataB, dataType);
         }
 
         CorrelationAnalysisResponse response = new CorrelationAnalysisResponse();
@@ -154,11 +198,148 @@ public class QuantCalculationService {
         response.setMatrixStockNames(stockCodes.stream().map(stockNameMap::get).collect(Collectors.toList()));
         response.setRollingCorrelation(rollingCorrelation);
         response.setDetailRows(detailRows);
+        response.setScatterData(scatterData);
+        response.setCalculationTime(calcTime);
 
         log.info("相关性分析计算完成，概览数: {}, 矩阵单元格数: {}, 明细行数: {}",
                 overviews.size(), correlationMatrix.size(), detailRows.size());
 
         return response;
+    }
+
+    public AsyncTaskSubmitResponse submitAsyncTask(QuantRequest request) {
+        String taskId = UUID.randomUUID().toString().replace("-", "").substring(0, 16);
+        AsyncTaskState state = new AsyncTaskState(taskId);
+        asyncTasks.put(taskId, state);
+
+        asyncExecutor.submit(() -> {
+            try {
+                state.setStatus("RUNNING");
+                state.setProgress(0);
+                CorrelationAnalysisResponse result = calculateCorrelation(request);
+                state.setResult(result);
+                state.setProgress(100);
+                state.setStatus("COMPLETED");
+            } catch (Exception e) {
+                log.error("异步任务执行失败: {}", taskId, e);
+                state.setStatus("FAILED");
+                state.setMessage(e.getMessage());
+            }
+        });
+
+        return new AsyncTaskSubmitResponse(taskId, "异步计算任务已提交");
+    }
+
+    public AsyncTaskQueryResponse queryAsyncTask(String taskId) {
+        AsyncTaskState state = asyncTasks.get(taskId);
+        if (state == null) {
+            AsyncTaskQueryResponse resp = new AsyncTaskQueryResponse();
+            resp.setTaskId(taskId);
+            resp.setStatus("NOT_FOUND");
+            resp.setMessage("任务不存在");
+            return resp;
+        }
+
+        AsyncTaskQueryResponse resp = new AsyncTaskQueryResponse();
+        resp.setTaskId(taskId);
+        resp.setStatus(state.getStatus());
+        resp.setProgress(state.getProgress());
+        resp.setMessage(state.getMessage());
+        resp.setResult(state.getResult());
+        return resp;
+    }
+
+    public boolean stopAsyncTask(String taskId) {
+        AsyncTaskState state = asyncTasks.get(taskId);
+        if (state == null) {
+            return false;
+        }
+        state.setStatus("STOPPED");
+        state.setMessage("用户手动停止");
+        asyncTasks.remove(taskId);
+        return true;
+    }
+
+    public byte[] exportCorrelationToExcel(List<CorrelationDetailRow> rows) {
+        try (org.apache.poi.ss.usermodel.Workbook workbook = new org.apache.poi.xssf.usermodel.XSSFWorkbook()) {
+            org.apache.poi.ss.usermodel.Sheet sheet = workbook.createSheet("相关性分析明细");
+
+            org.apache.poi.ss.usermodel.Row headerRow = sheet.createRow(0);
+            String[] headers = {"序号", "标的A代码", "标的A名称", "标的B代码", "标的B名称",
+                    "统计日期", "滚动窗口", "Pearson系数", "Spearman系数", "计算数据类型",
+                    "相关性等级", "有效样本数", "计算时间"};
+            for (int i = 0; i < headers.length; i++) {
+                org.apache.poi.ss.usermodel.Cell cell = headerRow.createCell(i);
+                cell.setCellValue(headers[i]);
+            }
+
+            int rowNum = 1;
+            for (CorrelationDetailRow row : rows) {
+                org.apache.poi.ss.usermodel.Row dataRow = sheet.createRow(rowNum++);
+                dataRow.createCell(0).setCellValue(row.getSerialNumber());
+                dataRow.createCell(1).setCellValue(row.getStockCodeA());
+                dataRow.createCell(2).setCellValue(row.getStockNameA());
+                dataRow.createCell(3).setCellValue(row.getStockCodeB());
+                dataRow.createCell(4).setCellValue(row.getStockNameB());
+                dataRow.createCell(5).setCellValue(row.getStatDate() != null ? row.getStatDate().toString() : "");
+                dataRow.createCell(6).setCellValue(row.getRollingWindow() != null ? row.getRollingWindow() : 0);
+                dataRow.createCell(7).setCellValue(row.getPearsonCoefficient());
+                dataRow.createCell(8).setCellValue(row.getSpearmanCoefficient());
+                dataRow.createCell(9).setCellValue(row.getDataType() != null ? row.getDataType() : "");
+                dataRow.createCell(10).setCellValue(row.getCorrelationLevel() != null ? row.getCorrelationLevel() : "");
+                dataRow.createCell(11).setCellValue(row.getSampleCount() != null ? row.getSampleCount() : 0);
+                dataRow.createCell(12).setCellValue(row.getCalculationTime() != null ? row.getCalculationTime().format(DATETIME_FMT) : "");
+            }
+
+            for (int i = 0; i < headers.length; i++) {
+                sheet.autoSizeColumn(i);
+            }
+
+            ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+            workbook.write(outputStream);
+            return outputStream.toByteArray();
+        } catch (Exception e) {
+            log.error("导出Excel失败", e);
+            throw new RuntimeException("导出Excel失败", e);
+        }
+    }
+
+    public byte[] exportCorrelationToCSV(List<CorrelationDetailRow> rows) {
+        try {
+            ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+            OutputStreamWriter writer = new OutputStreamWriter(outputStream, StandardCharsets.UTF_8);
+
+            writer.write("\uFEFF");
+            writer.write(String.join(",", "序号", "标的A代码", "标的A名称", "标的B代码", "标的B名称",
+                    "统计日期", "滚动窗口", "Pearson系数", "Spearman系数", "计算数据类型",
+                    "相关性等级", "有效样本数", "计算时间"));
+            writer.write("\n");
+
+            for (CorrelationDetailRow row : rows) {
+                List<String> fields = new ArrayList<>();
+                fields.add(String.valueOf(row.getSerialNumber()));
+                fields.add(row.getStockCodeA());
+                fields.add(row.getStockNameA());
+                fields.add(row.getStockCodeB());
+                fields.add(row.getStockNameB());
+                fields.add(row.getStatDate() != null ? row.getStatDate().toString() : "");
+                fields.add(row.getRollingWindow() != null ? String.valueOf(row.getRollingWindow()) : "0");
+                fields.add(row.getPearsonCoefficient() != null ? String.format("%.4f", row.getPearsonCoefficient()) : "0");
+                fields.add(row.getSpearmanCoefficient() != null ? String.format("%.4f", row.getSpearmanCoefficient()) : "0");
+                fields.add(row.getDataType() != null ? row.getDataType() : "");
+                fields.add(row.getCorrelationLevel() != null ? row.getCorrelationLevel() : "");
+                fields.add(row.getSampleCount() != null ? String.valueOf(row.getSampleCount()) : "0");
+                fields.add(row.getCalculationTime() != null ? row.getCalculationTime().format(DATETIME_FMT) : "");
+                writer.write(String.join(",", fields));
+                writer.write("\n");
+            }
+
+            writer.flush();
+            return outputStream.toByteArray();
+        } catch (Exception e) {
+            log.error("导出CSV失败", e);
+            throw new RuntimeException("导出CSV失败", e);
+        }
     }
 
     public LinkageAnalysisResponse calculateLinkage(QuantRequest request) {
@@ -181,12 +362,12 @@ public class QuantCalculationService {
 
         Map<String, List<StockInfo>> sectorStockDataMap = new HashMap<>();
         for (SectorInfo sector : sectors) {
-            String[] stockCodes = sector.getStockCodes().split(",");
+            String[] stockCodesArr = sector.getStockCodes().split(",");
             List<StockInfo> allData = new ArrayList<>();
-            for (String code : stockCodes) {
+            for (String code : stockCodesArr) {
                 List<StockInfo> data = stockInfoRepository.findByCodeAndTradeDateBetweenOrderByTradeDateAsc(
                         code.trim(), startDate, endDate);
-                allData.addAll(cleanStockData(data));
+                allData.addAll(cleanStockData(data, true));
             }
             sectorStockDataMap.put(sector.getSectorCode(), allData);
         }
@@ -290,9 +471,9 @@ public class QuantCalculationService {
         if ("ROLLING".equals(request.getCalculationMode()) && rollingWindow != null && sectors.size() >= 2) {
             List<StockInfo> dataA = sectorStockDataMap.get(sectors.get(0).getSectorCode());
             List<StockInfo> dataB = sectorStockDataMap.get(sectors.get(1).getSectorCode());
-            rollingLinkage = calculateRollingCorrelation(dataA, dataB, dataType, rollingWindow,
+            rollingLinkage = calculateRollingCorrelation(dataA, dataB, dataType, rollingWindow, 1,
                     sectors.get(0).getSectorCode(), sectors.get(1).getSectorCode(),
-                    sectors.get(0).getSectorName(), sectors.get(1).getSectorName(), new ArrayList<>());
+                    sectors.get(0).getSectorName(), sectors.get(1).getSectorName(), new ArrayList<>(), LocalDateTime.now());
         }
 
         LinkageAnalysisResponse response = new LinkageAnalysisResponse();
@@ -307,7 +488,7 @@ public class QuantCalculationService {
         return response;
     }
 
-    private List<StockInfo> cleanStockData(List<StockInfo> data) {
+    private List<StockInfo> cleanStockData(List<StockInfo> data, boolean outlierFilter) {
         if (data == null || data.isEmpty()) {
             return new ArrayList<>();
         }
@@ -331,6 +512,37 @@ public class QuantCalculationService {
             }
             seenDates.add(info.getTradeDate());
             cleaned.add(info);
+        }
+
+        if (outlierFilter && !cleaned.isEmpty()) {
+            List<Double> returns = cleaned.stream()
+                    .map(s -> s.getDailyReturn() != null ? s.getDailyReturn() : 0.0)
+                    .collect(Collectors.toList());
+
+            if (returns.size() > 10) {
+                double[] retArray = returns.stream().mapToDouble(Double::doubleValue).toArray();
+                DescriptiveStatistics stats = new DescriptiveStatistics(retArray);
+                double mean = stats.getMean();
+                double std = stats.getStandardDeviation();
+                double lowerBound = mean - 3 * std;
+                double upperBound = mean + 3 * std;
+
+                Iterator<StockInfo> it = cleaned.iterator();
+                int outlierCount = 0;
+                int idx = 0;
+                while (it.hasNext()) {
+                    StockInfo info = it.next();
+                    double ret = info.getDailyReturn() != null ? info.getDailyReturn() : 0.0;
+                    if (ret < lowerBound || ret > upperBound) {
+                        it.remove();
+                        outlierCount++;
+                    }
+                    idx++;
+                }
+                if (outlierCount > 0) {
+                    log.info("异常值过滤移除 {} 条数据（3σ准则）", outlierCount);
+                }
+            }
         }
 
         if (removedCount > 0) {
@@ -409,9 +621,9 @@ public class QuantCalculationService {
     }
 
     private List<RollingCorrelationPoint> calculateRollingCorrelation(
-            List<StockInfo> dataA, List<StockInfo> dataB, String dataType, int windowSize,
+            List<StockInfo> dataA, List<StockInfo> dataB, String dataType, int windowSize, int step,
             String codeA, String codeB, String nameA, String nameB,
-            List<CorrelationDetailRow> detailRows) {
+            List<CorrelationDetailRow> detailRows, LocalDateTime calcTime) {
 
         List<RollingCorrelationPoint> points = new ArrayList<>();
 
@@ -426,7 +638,7 @@ public class QuantCalculationService {
 
         int serialNumber = 1;
 
-        for (int i = windowSize - 1; i < sortedDates.size(); i++) {
+        for (int i = windowSize - 1; i < sortedDates.size(); i += step) {
             LocalDate endDate = sortedDates.get(i);
             List<Double> windowA = new ArrayList<>();
             List<Double> windowB = new ArrayList<>();
@@ -474,6 +686,9 @@ public class QuantCalculationService {
                 row.setPearsonCoefficient(Math.round(pearson * 10000.0) / 10000.0);
                 row.setSpearmanCoefficient(Math.round(spearman * 10000.0) / 10000.0);
                 row.setDataType(dataType);
+                row.setCorrelationLevel(getCorrelationLevel(pearson));
+                row.setSampleCount(arrA.length);
+                row.setCalculationTime(calcTime);
                 detailRows.add(row);
 
                 saveQuantResult("ROLLING_CORRELATION", codeA, nameA, codeB, nameB,
@@ -487,7 +702,8 @@ public class QuantCalculationService {
 
     private void generateDetailRows(List<StockInfo> dataA, List<StockInfo> dataB, String dataType,
                                      String codeA, String codeB, String nameA, String nameB,
-                                     List<CorrelationDetailRow> detailRows) {
+                                     List<CorrelationDetailRow> detailRows, int sampleCount,
+                                     LocalDateTime calcTime) {
 
         Map<LocalDate, StockInfo> dataMapA = dataA.stream()
                 .collect(Collectors.toMap(StockInfo::getTradeDate, s -> s));
@@ -526,7 +742,37 @@ public class QuantCalculationService {
         row.setPearsonCoefficient(Math.round(pearson * 10000.0) / 10000.0);
         row.setSpearmanCoefficient(Math.round(spearman * 10000.0) / 10000.0);
         row.setDataType(dataType);
+        row.setCorrelationLevel(getCorrelationLevel(pearson));
+        row.setSampleCount(allA.length);
+        row.setCalculationTime(calcTime);
         detailRows.add(row);
+    }
+
+    private List<ScatterPoint> generateScatterData(List<StockInfo> dataA, List<StockInfo> dataB, String dataType) {
+        List<ScatterPoint> scatterData = new ArrayList<>();
+
+        Map<LocalDate, StockInfo> dataMapA = dataA.stream()
+                .collect(Collectors.toMap(StockInfo::getTradeDate, s -> s));
+        Map<LocalDate, StockInfo> dataMapB = dataB.stream()
+                .collect(Collectors.toMap(StockInfo::getTradeDate, s -> s));
+
+        Set<LocalDate> commonDates = new TreeSet<>(dataMapA.keySet());
+        commonDates.retainAll(dataMapB.keySet());
+
+        for (LocalDate date : commonDates) {
+            StockInfo infoA = dataMapA.get(date);
+            StockInfo infoB = dataMapB.get(date);
+
+            if (infoA != null && infoB != null) {
+                ScatterPoint point = new ScatterPoint();
+                point.setXValue(getValueByType(infoA, dataType));
+                point.setYValue(getValueByType(infoB, dataType));
+                point.setDate(date.format(DATE_FMT));
+                scatterData.add(point);
+            }
+        }
+
+        return scatterData;
     }
 
     private double getValueByType(StockInfo info, String dataType) {
@@ -539,13 +785,16 @@ public class QuantCalculationService {
         };
     }
 
-    private String getCorrelationDescription(double coefficient) {
-        double abs = Math.abs(coefficient);
+    private String getCorrelationLevel(double coefficient) {
         if (coefficient > 0.7) return "强正相关";
         if (coefficient > 0.3) return "弱正相关";
         if (coefficient < -0.7) return "强负相关";
         if (coefficient < -0.3) return "弱负相关";
         return "无相关";
+    }
+
+    private String getCorrelationDescription(double coefficient) {
+        return getCorrelationLevel(coefficient);
     }
 
     private void saveQuantResult(String calcType, String codeA, String nameA, String codeB, String nameB,
@@ -577,46 +826,6 @@ public class QuantCalculationService {
         return indexDataRepository.findAllDistinctIndices();
     }
 
-    public byte[] exportCorrelationToExcel(List<CorrelationDetailRow> rows) {
-        try (org.apache.poi.ss.usermodel.Workbook workbook = new org.apache.poi.xssf.usermodel.XSSFWorkbook()) {
-            org.apache.poi.ss.usermodel.Sheet sheet = workbook.createSheet("相关性分析明细");
-
-            org.apache.poi.ss.usermodel.Row headerRow = sheet.createRow(0);
-            String[] headers = {"序号", "标的A代码", "标的A名称", "标的B代码", "标的B名称",
-                    "统计日期", "滚动窗口", "Pearson系数", "Spearman系数", "计算数据类型"};
-            for (int i = 0; i < headers.length; i++) {
-                org.apache.poi.ss.usermodel.Cell cell = headerRow.createCell(i);
-                cell.setCellValue(headers[i]);
-            }
-
-            int rowNum = 1;
-            for (CorrelationDetailRow row : rows) {
-                org.apache.poi.ss.usermodel.Row dataRow = sheet.createRow(rowNum++);
-                dataRow.createCell(0).setCellValue(row.getSerialNumber());
-                dataRow.createCell(1).setCellValue(row.getStockCodeA());
-                dataRow.createCell(2).setCellValue(row.getStockNameA());
-                dataRow.createCell(3).setCellValue(row.getStockCodeB());
-                dataRow.createCell(4).setCellValue(row.getStockNameB());
-                dataRow.createCell(5).setCellValue(row.getStatDate().toString());
-                dataRow.createCell(6).setCellValue(row.getRollingWindow());
-                dataRow.createCell(7).setCellValue(row.getPearsonCoefficient());
-                dataRow.createCell(8).setCellValue(row.getSpearmanCoefficient());
-                dataRow.createCell(9).setCellValue(row.getDataType());
-            }
-
-            for (int i = 0; i < headers.length; i++) {
-                sheet.autoSizeColumn(i);
-            }
-
-            java.io.ByteArrayOutputStream outputStream = new java.io.ByteArrayOutputStream();
-            workbook.write(outputStream);
-            return outputStream.toByteArray();
-        } catch (Exception e) {
-            log.error("导出Excel失败", e);
-            throw new RuntimeException("导出Excel失败", e);
-        }
-    }
-
     public byte[] exportLinkageToExcel(List<SectorLinkageRank> rows) {
         try (org.apache.poi.ss.usermodel.Workbook workbook = new org.apache.poi.xssf.usermodel.XSSFWorkbook()) {
             org.apache.poi.ss.usermodel.Sheet sheet = workbook.createSheet("板块联动排名");
@@ -645,12 +854,33 @@ public class QuantCalculationService {
                 sheet.autoSizeColumn(i);
             }
 
-            java.io.ByteArrayOutputStream outputStream = new java.io.ByteArrayOutputStream();
+            ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
             workbook.write(outputStream);
             return outputStream.toByteArray();
         } catch (Exception e) {
             log.error("导出Excel失败", e);
             throw new RuntimeException("导出Excel失败", e);
         }
+    }
+
+    private static class AsyncTaskState {
+        private final String taskId;
+        private volatile String status = "PENDING";
+        private final AtomicInteger progress = new AtomicInteger(0);
+        private volatile String message;
+        private volatile CorrelationAnalysisResponse result;
+
+        AsyncTaskState(String taskId) {
+            this.taskId = taskId;
+        }
+
+        String getStatus() { return status; }
+        void setStatus(String status) { this.status = status; }
+        int getProgress() { return progress.get(); }
+        void setProgress(int value) { this.progress.set(value); }
+        String getMessage() { return message; }
+        void setMessage(String message) { this.message = message; }
+        CorrelationAnalysisResponse getResult() { return result; }
+        void setResult(CorrelationAnalysisResponse result) { this.result = result; }
     }
 }

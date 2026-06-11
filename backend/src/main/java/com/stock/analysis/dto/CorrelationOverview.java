@@ -21,4 +21,5 @@ public class CorrelationOverview {
     private Double pearsonCoefficient;
     private Double spearmanCoefficient;
     private String correlationDescription;
+    private Integer sampleCount;
 }

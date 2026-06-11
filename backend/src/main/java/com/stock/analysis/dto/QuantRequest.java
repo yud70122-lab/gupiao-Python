@@ -25,4 +25,14 @@ public class QuantRequest {
     private String calculationMode;
 
     private String sectorCode;
+
+    private String adjustmentType;
+
+    private Integer rollingStep;
+
+    private Boolean outlierFilter;
+
+    private Boolean resultCache;
+
+    private String schemeName;
 }

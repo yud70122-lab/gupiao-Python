@@ -29,6 +29,7 @@ D:\gitHab-p\新建文件夹\gupiao-Python\backend\src\main\java\com\stock\analysis\dt
 D:\gitHab-p\新建文件夹\gupiao-Python\backend\src\main\java\com\stock\analysis\entity\UserDataPermission.java
 D:\gitHab-p\新建文件夹\gupiao-Python\backend\src\main\java\com\stock\analysis\dto\LinkageOverview.java
 D:\gitHab-p\新建文件夹\gupiao-Python\backend\src\main\java\com\stock\analysis\controller\UserController.java
+D:\gitHab-p\新建文件夹\gupiao-Python\backend\src\main\java\com\stock\analysis\dto\CorrelationScheme.java
 D:\gitHab-p\新建文件夹\gupiao-Python\backend\src\main\java\com\stock\analysis\dto\RiskReturnPoint.java
 D:\gitHab-p\新建文件夹\gupiao-Python\backend\src\main\java\com\stock\analysis\entity\CollectionLog.java
 D:\gitHab-p\新建文件夹\gupiao-Python\backend\src\main\java\com\stock\analysis\entity\QuantCalculationResult.java
@@ -40,12 +41,14 @@ D:\gitHab-p\新建文件夹\gupiao-Python\backend\src\main\java\com\stock\analysis\co
 D:\gitHab-p\新建文件夹\gupiao-Python\backend\src\main\java\com\stock\analysis\repository\StockGroupRepository.java
 D:\gitHab-p\新建文件夹\gupiao-Python\backend\src\main\java\com\stock\analysis\service\UserContext.java
 D:\gitHab-p\新建文件夹\gupiao-Python\backend\src\main\java\com\stock\analysis\controller\QuantAnalysisController.java
+D:\gitHab-p\新建文件夹\gupiao-Python\backend\src\main\java\com\stock\analysis\dto\AsyncTaskSubmitResponse.java
 D:\gitHab-p\新建文件夹\gupiao-Python\backend\src\main\java\com\stock\analysis\controller\GovernanceController.java
 D:\gitHab-p\新建文件夹\gupiao-Python\backend\src\main\java\com\stock\analysis\repository\CollectionMarketDataRepository.java
 D:\gitHab-p\新建文件夹\gupiao-Python\backend\src\main\java\com\stock\analysis\repository\UserRepository.java
 D:\gitHab-p\新建文件夹\gupiao-Python\backend\src\main\java\com\stock\analysis\entity\Role.java
 D:\gitHab-p\新建文件夹\gupiao-Python\backend\src\main\java\com\stock\analysis\repository\SystemConfigRepository.java
 D:\gitHab-p\新建文件夹\gupiao-Python\backend\src\main\java\com\stock\analysis\controller\ConfigController.java
+D:\gitHab-p\新建文件夹\gupiao-Python\backend\src\main\java\com\stock\analysis\dto\AsyncTaskQueryResponse.java
 D:\gitHab-p\新建文件夹\gupiao-Python\backend\src\main\java\com\stock\analysis\controller\AuthController.java
 D:\gitHab-p\新建文件夹\gupiao-Python\backend\src\main\java\com\stock\analysis\repository\FavoriteStockRepository.java
 D:\gitHab-p\新建文件夹\gupiao-Python\backend\src\main\java\com\stock\analysis\controller\DataPermissionController.java
@@ -89,3 +92,4 @@ D:\gitHab-p\新建文件夹\gupiao-Python\backend\src\main\java\com\stock\analysis\en
 D:\gitHab-p\新建文件夹\gupiao-Python\backend\src\main\java\com\stock\analysis\config\DataInitializer.java
 D:\gitHab-p\新建文件夹\gupiao-Python\backend\src\main\java\com\stock\analysis\controller\StatisticsController.java
 D:\gitHab-p\新建文件夹\gupiao-Python\backend\src\main\java\com\stock\analysis\entity\IndexData.java
+D:\gitHab-p\新建文件夹\gupiao-Python\backend\src\main\java\com\stock\analysis\dto\ScatterPoint.java
