@@ -306,7 +306,7 @@
       </el-card>
     </div>
 
-    <el-empty v-else-if="!calculating" description="请配置参数后点击开始计算"></el-empty>
+    <el-empty v-else-if="!calculating && !resultData && calcHistory.length === 0" description="请配置参数后点击开始计算"></el-empty>
 
     <el-card v-if="calcHistory.length > 0" class="history-card">
       <div slot="header">
@@ -504,7 +504,7 @@ export default {
     async loadInitialData() {
       try {
         const res = await getAllStocks()
-        this.stockOptions = res.data
+        this.stockOptions = res
       } catch (e) {
         this.$message.error('加载基础数据失败')
       }
@@ -512,7 +512,7 @@ export default {
     async loadSchemes() {
       try {
         const res = await listCorrelationSchemes()
-        this.savedSchemes = res.data || []
+        this.savedSchemes = res || []
       } catch (e) {
         this.savedSchemes = []
       }
@@ -522,7 +522,7 @@ export default {
       this.stockLoading = true
       try {
         const res = await searchStocks(query)
-        this.stockOptions = res.data
+        this.stockOptions = res
       } catch (e) {
         this.$message.error('搜索股票失败')
       } finally {
@@ -626,18 +626,18 @@ export default {
       try {
         if (isSync) {
           const res = await calculateCorrelationSync(request)
-          this.resultData = res.data
+          this.resultData = res
           this.addHistory('成功')
           this.$message.success('计算完成')
         } else {
           const submitRes = await submitAsyncCorrelation(request)
-          this.asyncTaskId = submitRes.data.taskId
+          this.asyncTaskId = submitRes.taskId
           this.startPolling()
         }
       } catch (e) {
         this.calculating = false
         this.addHistory('失败')
-        this.$message.error(e.response?.data?.message || '计算失败')
+        this.$message.error(e.message || '计算失败')
       }
 
       if (isSync) {
@@ -653,8 +653,7 @@ export default {
       }
       this.pollTimer = setInterval(async () => {
         try {
-          const res = await queryAsyncCorrelation(this.asyncTaskId)
-          const data = res.data
+          const data = await queryAsyncCorrelation(this.asyncTaskId)
 
           this.asyncProgress = data.progress || 0
 
@@ -736,7 +735,7 @@ export default {
         const res = await exportFn(this.resultData.detailRows)
         const ext = format === 'csv' ? 'csv' : 'xlsx'
         const mimeType = format === 'csv' ? 'text/csv' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        const url = window.URL.createObjectURL(new Blob([res.data], { type: mimeType }))
+        const url = window.URL.createObjectURL(new Blob([res], { type: mimeType }))
         const link = document.createElement('a')
         link.href = url
         link.setAttribute('download', `相关性分析明细.${ext}`)

@@ -304,8 +304,8 @@ export default {
           getSectors(),
           getIndices()
         ])
-        this.sectorOptions = sectorsRes.data
-        this.indexOptions = indicesRes.data.map(item => ({ code: item[0], name: item[1] }))
+        this.sectorOptions = sectorsRes
+        this.indexOptions = indicesRes.map(item => ({ code: item[0], name: item[1] }))
         this.searchForm.sectorCodes = this.sectorOptions.filter(s => s.sectorType === 'INDUSTRY').map(s => s.sectorCode)
       } catch (e) {
         this.$message.error('加载基础数据失败')
@@ -342,7 +342,7 @@ export default {
         }
 
         const res = await calculateLinkage(request)
-        this.resultData = res.data
+        this.resultData = res
 
         if (this.resultData.sectorRankings.length === 0 &&
             this.resultData.sectorLinkageMatrix.length === 0) {
@@ -357,7 +357,7 @@ export default {
           this.$message.success('计算完成')
         }
       } catch (e) {
-        const errorMsg = e.response?.data?.message || '计算失败'
+        const errorMsg = e.message || '计算失败'
         this.$message.error(errorMsg)
         console.error('联动性分析计算错误:', e)
       } finally {
@@ -620,7 +620,7 @@ export default {
       try {
         const rowsToExport = this.filteredRankings
         const res = await exportLinkageExcel(rowsToExport)
-        const url = window.URL.createObjectURL(new Blob([res.data]))
+        const url = window.URL.createObjectURL(new Blob([res]))
         const link = document.createElement('a')
         link.href = url
         link.setAttribute('download', '板块联动排名.xlsx')
